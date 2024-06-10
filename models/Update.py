@@ -227,34 +227,36 @@ class LocalUpdateDPSerial(LocalUpdateDP):
         optimizer = torch.optim.SGD(net.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=self.args.lr_decay)
         losses = 0
-        for images, labels in self.ldr_train:
-            net.zero_grad()
-            index = int(len(images) / self.args.serial_bs)
-            total_grads = [torch.zeros(size=param.shape).to(self.args.device) for param in net.parameters()]
-            for i in range(0, index + 1):
+        for _ in range(self.args.local_epochs):
+            for images, labels in self.ldr_train:
                 net.zero_grad()
-                start = i * self.args.serial_bs
-                end = (i+1) * self.args.serial_bs if (i+1) * self.args.serial_bs < len(images) else len(images)
-                # print(end - start)
-                if start == end:
-                    break
-                image_serial_batch, labels_serial_batch \
-                    = images[start:end].to(self.args.device), labels[start:end].to(self.args.device)
-                log_probs = net(image_serial_batch)
-                loss = self.loss_func(log_probs, labels_serial_batch)
-                loss.backward()
+                index = int(len(images) / self.args.serial_bs)
+                total_grads = [torch.zeros(size=param.shape).to(self.args.device) for param in net.parameters()]
+                for i in range(0, index + 1):
+                    net.zero_grad()
+                    start = i * self.args.serial_bs
+                    end = (i+1) * self.args.serial_bs if (i+1) * self.args.serial_bs < len(images) else len(images)
+                    # print(end - start)
+                    if start == end:
+                        break
+                    image_serial_batch, labels_serial_batch \
+                        = images[start:end].to(self.args.device), labels[start:end].to(self.args.device)
+                    log_probs = net(image_serial_batch)
+                    loss = self.loss_func(log_probs, labels_serial_batch)
+                    loss.backward()
+                    if self.args.dp_mechanism != 'no_dp':
+                        self.clip_gradients(net)
+                    grads = [param.grad.detach().clone() for param in net.parameters()]
+                    for idx, grad in enumerate(grads):
+                        total_grads[idx] += torch.mul(torch.div((end - start), len(images)), grad)
+                    losses += loss.item() * (end - start)
+                for i, param in enumerate(net.parameters()):
+                    param.grad = total_grads[i]
+                optimizer.step()
+                scheduler.step()
+                # add noises to parameters
                 if self.args.dp_mechanism != 'no_dp':
-                    self.clip_gradients(net)
-                grads = [param.grad.detach().clone() for param in net.parameters()]
-                for idx, grad in enumerate(grads):
-                    total_grads[idx] += torch.mul(torch.div((end - start), len(images)), grad)
-                losses += loss.item() * (end - start)
-            for i, param in enumerate(net.parameters()):
-                param.grad = total_grads[i]
-            optimizer.step()
-            scheduler.step()
-            # add noises to parameters
-            if self.args.dp_mechanism != 'no_dp':
-                self.add_noise(net)
-            self.lr = scheduler.get_last_lr()[0]
+                    self.add_noise(net)
+                self.lr = scheduler.get_last_lr()[0]
+        
         return net.state_dict(), losses / len(self.idxs_sample)
