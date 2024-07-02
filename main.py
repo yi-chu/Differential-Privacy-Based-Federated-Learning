@@ -17,7 +17,7 @@ import time
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid,cifar_noniid
 from utils.options import args_parser
 from models.Update import LocalUpdateDP, LocalUpdateDPSerial
-from models.Nets import MLP, CNNMnist, CNNCifar, CNNFemnist, CharLSTM, VGG11
+from models.Nets import MLP, CNNMnist, CNNCifar, CNNFemnist, CharLSTM, VGG11, LeNet5
 from models.Fed import FedAvg, FedWeightAvg
 from models.test import test_img
 from utils.dataset import FEMNIST, ShakeSpeare
@@ -130,6 +130,8 @@ if __name__ == '__main__':
         for x in img_size:
             len_in *= x
         net_glob = MLP(dim_in=len_in, dim_hidden=64, dim_out=args.num_classes).to(args.device)
+    elif args.model == 'LeNet5':
+        net_glob = LeNet5().to(args.device)
     else:
         exit('Error: unrecognized model')
 
@@ -225,12 +227,12 @@ if __name__ == '__main__':
         datfile.write("epoch= {}, acc = {}\n".format(iter, acc_t.item()))
         datfile.write("upload= {}, download = {}\n".format(upload, download))
 
-    noise = 0
-    if args.dp_mechanism == "DpSecureAggregation" or "NISS":
-        for idx in idxs_users:
-            noise += clients[idx].get_noise()
-            print(clients[idx].get_noise())
-        print(noise)
+        noise = 0
+        if args.dp_mechanism == "DpSecureAggregation" or "NISS":
+            for idx in idxs_users:
+                noise += clients[idx].get_noise()
+                print(clients[idx].get_noise())
+            print(noise)
 
     if not os.path.exists(rootpath):
         os.makedirs(rootpath)

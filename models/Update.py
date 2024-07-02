@@ -85,21 +85,22 @@ class LocalUpdateDP(object):
         optimizer = torch.optim.SGD(net.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=self.args.lr_decay)
         loss_client = 0
-        for images, labels in self.ldr_train:
-            images, labels = images.to(self.args.device), labels.to(self.args.device)
-            net.zero_grad()
-            log_probs = net(images)
-            loss = self.loss_func(log_probs, labels)
-            loss.backward()
-            if self.args.dp_mechanism != 'no_dp':
-                self.clip_gradients(net)
-            optimizer.step()
-            scheduler.step()
-            # add noises to parameters
-            if self.args.dp_mechanism != 'no_dp':
-                self.add_noise(net)
-            loss_client = loss.item()
-        self.lr = scheduler.get_last_lr()[0]
+        for _ in range(self.args.local_epochs):
+            for images, labels in self.ldr_train:
+                images, labels = images.to(self.args.device), labels.to(self.args.device)
+                net.zero_grad()
+                log_probs = net(images)
+                loss = self.loss_func(log_probs, labels)
+                loss.backward()
+                if self.args.dp_mechanism != 'no_dp':
+                    self.clip_gradients(net)
+                optimizer.step()
+                scheduler.step()
+                # add noises to parameters
+                if self.args.dp_mechanism != 'no_dp':
+                    self.add_noise(net)
+                loss_client = loss.item()
+            self.lr = scheduler.get_last_lr()[0]
         return net.state_dict(), loss_client
 
     def clip_gradients(self, net):
@@ -176,6 +177,7 @@ class LocalUpdateDP(object):
                         self.noise += noise.sum()
                         state_dict[k] += torch.from_numpy(noise).to(self.args.device)
         elif self.args.dp_mechanism == "NISS":
+            noise_factor = np.random.normal(loc=1,scale=max(0,self.args.k*2-1))
             for k, v in state_dict.items():
                 for client_id, variance in self.variances.items():
                     if client_id == self.id:
@@ -190,22 +192,14 @@ class LocalUpdateDP(object):
                         # 对方的噪音
                         noise = self.noise_generator[client_id].normal(loc=0, 
                                                 scale=variance/(len(self.variances)-1),
-                                                size=v.shape)
-                        # 对对方的噪音再乘上一个噪音
-                        noise = noise*np.random.normal(loc=1,
-                                                       scale=max(0,self.args.k*2-1),
-                                                       size=v.shape)
+                                                size=v.shape) * noise_factor
                         self.noise -= noise.sum()
                         state_dict[k] -= torch.from_numpy(noise).to(self.args.device)
                     else:
                         # 对方的噪音
                         noise = self.noise_generator[client_id].normal(loc=0, 
                                                 scale=variance/(len(self.variances)-1),
-                                                size=v.shape)
-                        # 对对方的噪音再乘上一个噪音
-                        noise = noise*np.random.normal(loc=1,
-                                                       scale=max(0,self.args.k*2-1),
-                                                       size=v.shape)
+                                                size=v.shape) * noise_factor
                         self.noise -= noise.sum()
                         state_dict[k] -= torch.from_numpy(noise).to(self.args.device)
                         # 自己的噪音
@@ -255,8 +249,8 @@ class LocalUpdateDPSerial(LocalUpdateDP):
                 optimizer.step()
                 scheduler.step()
                 # add noises to parameters
-                if self.args.dp_mechanism != 'no_dp':
-                    self.add_noise(net)
                 self.lr = scheduler.get_last_lr()[0]
+        if self.args.dp_mechanism != 'no_dp':
+            self.add_noise(net)
         
         return net.state_dict(), losses / len(self.idxs_sample)

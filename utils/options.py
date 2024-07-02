@@ -10,11 +10,11 @@ def args_parser():
     parser.add_argument('--epochs', type=int, default=100, help="rounds of training")
     parser.add_argument('--local_epochs', type=int, default=10, help="rounds of local training")
     parser.add_argument('--num_users', type=int, default=100, help="number of users: K")
-    parser.add_argument('--frac', type=float, default=0.5, help="the fraction of clients: C")
+    parser.add_argument('--frac', type=float, default=1, help="the fraction of clients: C")
     parser.add_argument('--dropout', type=int, default=0, help="the percent of dropout clients")
     parser.add_argument('--bs', type=int, default=1024, help="test batch size")
     parser.add_argument('--lr', type=float, default=0.1, help="learning rate")
-    parser.add_argument('--lr_decay', type=float, default=0.995, help="learning rate decay each round")
+    parser.add_argument('--lr_decay', type=float, default=0.999, help="learning rate decay each round")
     parser.add_argument('--random_seed', type=int, default=123, help="random seed of random generator")
     parser.add_argument('--upper_bound_of_random_number', type=int, 
                         default=123456789, help="upperbound of random number")
