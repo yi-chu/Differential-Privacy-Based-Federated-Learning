@@ -96,11 +96,11 @@ class LocalUpdateDP(object):
                     self.clip_gradients(net)
                 optimizer.step()
                 scheduler.step()
-                # add noises to parameters
-                if self.args.dp_mechanism != 'no_dp':
-                    self.add_noise(net)
                 loss_client = loss.item()
             self.lr = scheduler.get_last_lr()[0]
+        # add noises to parameters
+        if self.args.dp_mechanism != 'no_dp':
+            self.add_noise(net)
         return net.state_dict(), loss_client
 
     def clip_gradients(self, net):
